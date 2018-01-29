@@ -1,0 +1,35 @@
+- name: Update hosts file
+  lineinfile:
+    dest: /etc/hosts
+    line: "{{ hostvars[item].ansible_all_ipv4_addresses[0] }}\t{{ hostvars[item].ansible_nodename }} {{ hostvars[item].ansible_hostname }}"
+  with_items: "{{ ansible_play_hosts }}"
+
+- name: Enable IP forwarding
+  sysctl:
+    name: "net.ipv4.ip_forward"
+    value: 1
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Add official Kubernetes repository
+  apt_repository:
+    repo: 'deb http://apt.kubernetes.io/ kubernetes-xenial main'
+    state: present
+    filename: kubernetes
+
+- name: Add public key of Kubernetes repo
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+
+- name: Install Kubernetes packages
+  apt:
+    update_cache: yes
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - docker.io
+    - kubelet
+    - kubeadm
+    - kubectl
+    - kubernetes-cni

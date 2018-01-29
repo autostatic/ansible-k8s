@@ -1,0 +1,38 @@
+- name: Set inventory filename being used
+  set_fact:
+    inventory_basename: "{{ inventory_file | basename }}"
+
+- name: Create a hostname variable with the full hostname
+  set_fact:
+    full_hostname: "{{ openstack.name }}"
+  when: inventory_basename == "openstack.py"
+
+- name: Create a hostname variable with the full hostname
+  set_fact:
+    full_hostname: "{{ inventory_hostname }}"
+  when: inventory_basename == "hosts"
+
+- name: Upgrade packages
+  apt:
+    update_cache: yes
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - kubelet
+    - kubeadm
+    - kubectl
+    - kubernetes-cni
+
+- name: Generate upgrade command
+  shell: kubeadm upgrade plan | grep "kubeadm upgrade apply v[0-9].[0-9].[0-9]" | tr -d '\t'
+  register: kubeadm_upgrade_plan_result
+  when: full_hostname == master_fqdn
+
+- name: Set upgrade command
+  set_fact:
+    kubeadm_upgrade_plan: "{{ kubeadm_upgrade_plan_result.stdout }}"
+  when: full_hostname == master_fqdn
+
+- name: Upgrade server components
+  command: "{{ kubeadm_upgrade_plan }} -y"
+  when: full_hostname == master_fqdn

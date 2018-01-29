@@ -1,0 +1,5 @@
+[autostatic]
+master1.k8s.autostatic.net
+node1.k8s.autostatic.net
+node2.k8s.autostatic.net
+jump.k8s.autostatic.net

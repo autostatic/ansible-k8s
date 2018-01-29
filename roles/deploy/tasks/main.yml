@@ -1,0 +1,86 @@
+- name: Set inventory filename being used
+  set_fact:
+    inventory_basename: "{{ inventory_file | basename }}"
+
+- name: Create a hostname variable with the full hostname
+  set_fact:
+    full_hostname: "{{ openstack.name }}"
+  when: inventory_basename == "openstack.py"
+
+- name: Create a hostname variable with the full hostname
+  set_fact:
+    full_hostname: "{{ inventory_hostname }}"
+  when: inventory_basename == "hosts"
+
+- name: Reset cluster
+  shell: kubeadm reset
+
+- name: Delete /root/.kube/ directory on k8s master
+  file:
+    dest: /root/.kube/
+    state: absent
+  when: full_hostname == master_fqdn
+
+- name: Generate cluster token
+  command: kubeadm token generate
+  register: kubeadm_token_generate
+  when: k8s_token is not defined and full_hostname == master_fqdn
+
+- name: Set cluster token (k8s master)
+  set_fact:
+    k8s_token: "{{ kubeadm_token_generate.stdout }}"
+  when: k8s_token is not defined and full_hostname == master_fqdn
+
+- name: Set cluster token (k8s nodes)
+  set_fact:
+    k8s_token: "{{ hostvars[master_fqdn]['k8s_token'] }}"
+  when: k8s_token is not defined
+
+- name: Initialize cluster
+  command: kubeadm init --token "{{ k8s_token }}" --kubernetes-version "{{ k8s_version }}" --pod-network-cidr "{{ k8s_pod_network_cidr }}"
+  when: full_hostname == master_fqdn
+
+- name: Create /root/.kube/ directory on k8s master
+  file:
+    dest: /root/.kube/
+    state: directory
+    mode: 0755
+  when: full_hostname == master_fqdn
+
+- name: Copy kube config into place
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/config
+    remote_src: True
+  when: full_hostname == master_fqdn
+
+- name: Deploy Flannel
+  shell: "echo {{ lookup('template', 'roles/deploy/templates/kube-flannel.yml.j2') | quote }} | kubectl apply -f -"
+  when: full_hostname == master_fqdn
+
+- name: Initialize nodes
+  command: "kubeadm join --token {{ k8s_token }} --node-name {{ ansible_nodename }} {{ master_fqdn }}:6443"
+  when: full_hostname != master_fqdn
+
+- name: Fetch SSL certs
+  fetch:
+    src: "/etc/kubernetes/pki/{{ item }}"
+    dest: roles/deploy/files/ssl/
+    flat: yes
+  with_items:
+    - apiserver-kubelet-client.crt
+    - apiserver-kubelet-client.key
+    - ca.crt
+  when: jump_fqdn is defined and full_hostname == master_fqdn
+
+- name: Copy SSL certs
+  copy:
+    src: roles/deploy/files/ssl/
+    dest: /etc/nginx/ssl/k8s/
+  when: jump_fqdn is defined and full_hostname == jump_fqdn
+
+- name: Reload Nginx
+  service:
+    name: nginx
+    state: reloaded
+  when: jump_fqdn is defined and full_hostname == jump_fqdn

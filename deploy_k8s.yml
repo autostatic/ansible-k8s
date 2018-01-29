@@ -1,0 +1,13 @@
+- name: Deploy Kubernetes
+  hosts: "{{ target }}"
+  remote_user: root
+  gather_facts: yes
+  vars:
+    master_fqdn: master1.k8s.autostatic.net
+    jump_fqdn: jump.k8s.autostatic.net
+    k8s_version: stable
+    k8s_pod_network_cidr: 172.30.112.0/20
+    k8s_subnet_length: 24
+
+  roles:
+    - deploy

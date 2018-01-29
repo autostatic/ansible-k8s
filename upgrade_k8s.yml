@@ -1,0 +1,9 @@
+- name: Upgrade Kubernetes
+  hosts: "{{ target }}"
+  remote_user: root
+  gather_facts: yes
+  vars:
+    master_fqdn: "{{ master }}"
+
+  roles:
+    - upgrade
